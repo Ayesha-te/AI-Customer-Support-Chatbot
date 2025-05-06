@@ -2,42 +2,32 @@ import streamlit as st
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-from langchain_community.vectorstores import Pinecone as LangChainPinecone
+from langchain_community.vectorstores import Pinecone
 from langchain_community.embeddings import OpenAIEmbeddings
-from pinecone import Pinecone as PineconeClient, ServerlessSpec
 import yfinance as yf
 import requests
 
-# Load API keys from secrets
+# --- Secrets ---
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
 PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]
 WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
 
-# Set up Pinecone client (v3 compatible)
-pc = PineconeClient(api_key=PINECONE_API_KEY)
-
+# --- Vector Store Setup ---
 index_name = "customer-support-chatbot"
-if index_name not in pc.list_indexes().names():
-    pc.create_index(
-        name=index_name,
-        dimension=1536,
-        metric="cosine",
-        spec=ServerlessSpec(cloud="aws", region=PINECONE_ENV)
-    )
-
-# Set up embeddings
 embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 
-# LangChain VectorStore setup (DO NOT pass Pinecone SDK index directly)
-vectorstore = LangChainPinecone.from_existing_index(
+# Let LangChain handle Pinecone internally (don’t use pc = Pinecone(...))
+vectorstore = Pinecone.from_existing_index(
     index_name=index_name,
-    embedding=embeddings
+    embedding=embeddings,
+    pinecone_api_key=PINECONE_API_KEY,
+    environment=PINECONE_ENV
 )
 
-# Set up memory and chain
-memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+# --- LLM & Memory ---
 llm = ChatOpenAI(openai_api_key=OPENAI_API_KEY, temperature=0)
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
 qa_chain = ConversationalRetrievalChain.from_llm(
     llm=llm,
@@ -45,7 +35,7 @@ qa_chain = ConversationalRetrievalChain.from_llm(
     memory=memory
 )
 
-# Stock & Weather helpers
+# --- Stock & Weather Functions ---
 def get_stock_price(symbol):
     try:
         stock = yf.Ticker(symbol)
@@ -64,9 +54,9 @@ def get_weather(city):
     except:
         return "Weather service error."
 
-# Streamlit UI
+# --- Streamlit Chat UI ---
 st.title("🤖 AI Customer Support Chatbot")
-st.markdown("Ask about product FAQs, stock prices, or weather conditions.")
+st.markdown("Ask anything about products, weather, or stock prices.")
 
 if "chat_history" not in st.session_state:
     st.session_state.chat_history = []
@@ -77,8 +67,8 @@ if user_input:
     if "weather" in user_input.lower():
         city = user_input.split("in")[-1].strip()
         answer = get_weather(city)
-    elif any(keyword in user_input.lower() for keyword in ["stock", "price", "share"]):
-        symbol = user_input.upper().split()[-1].strip()
+    elif any(word in user_input.lower() for word in ["stock", "price", "share"]):
+        symbol = user_input.upper().split()[-1]
         answer = get_stock_price(symbol)
     else:
         result = qa_chain({"question": user_input})
@@ -89,3 +79,4 @@ if user_input:
 
 for speaker, msg in st.session_state.chat_history:
     st.markdown(f"**{speaker}:** {msg}")
+
