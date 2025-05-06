@@ -14,10 +14,10 @@ embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 
 # --- Example FAQ Documents ---
 faq_documents = [
-    {"question": "What are your business hours?", "answer": "We are open from 9 AM to 5 PM, Monday to Friday."},
-    {"question": "What is your return policy?", "answer": "Our return policy lasts 30 days from the purchase date."},
-    {"question": "Do you offer international shipping?", "answer": "Yes, we ship internationally, with extra fees depending on the country."},
-    {"question": "How can I contact customer support?", "answer": "You can reach us by email at support@example.com."}
+    {"question": "What are your business hours?", "answer": "We are open from 9 AM to 5 PM, Monday to Friday. ⏰"},
+    {"question": "What is your return policy?", "answer": "Our return policy lasts 30 days from the purchase date. 🔄"},
+    {"question": "Do you offer international shipping?", "answer": "Yes, we ship internationally, with extra fees depending on the country. 🌍✈️"},
+    {"question": "How can I contact customer support?", "answer": "You can reach us by email at support@example.com. 📧"}
 ]
 
 # Embedding FAQ questions for vector search
@@ -54,25 +54,35 @@ def qa_chain(user_input):
     answer = retrieve_answer(user_input)
     
     # Add the user input and answer to the conversation memory
-    memory.add_user_message(user_input)
-    memory.add_ai_message(answer)
+    memory.add_message(role="user", content=user_input)
+    memory.add_message(role="assistant", content=answer)
     
     return answer
 
 # --- Streamlit Frontend ---
-st.title("AI Customer Support Chatbot")
+st.title("🤖 AI Customer Support Chatbot")
+
+# Sidebar for Chatbot Controls
+st.sidebar.header("🛠 Chat Controls")
+clear_chat = st.sidebar.button("🧹 Clear Chat History")
+
+if clear_chat:
+    memory.clear()  # Clear the conversation history
 
 # User Input for chatbot
-user_input = st.text_input("Ask a question:")
+user_input = st.text_input("💬 Ask a question:")
 
 if user_input:
     # Get the answer from the conversational retrieval chain
     response = qa_chain(user_input)
-    st.write(response)
+    st.write(f"🤖 **Assistant:** {response}")
 
 # Display previous messages from the conversation history
 if memory.buffer:
-    st.subheader("Conversation History:")
+    st.subheader("💬 Conversation History:")
     for msg in memory.buffer:
-        st.write(f"{msg['role']}: {msg['content']}")
+        if msg['role'] == "user":
+            st.markdown(f"**You:** {msg['content']} 🗣️")
+        else:
+            st.markdown(f"**Assistant:** {msg['content']} 🤖")
 
