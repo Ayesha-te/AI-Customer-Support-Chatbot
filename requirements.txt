@@ -1,7 +1,7 @@
 streamlit
 openai
 langchain
+langchain-community
 pinecone-client
 yfinance
 requests
-langchain -community
