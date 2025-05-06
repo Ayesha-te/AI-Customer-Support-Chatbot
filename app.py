@@ -4,10 +4,9 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_community.vectorstores import Pinecone as PineconeVectorStore
 from langchain_community.embeddings import OpenAIEmbeddings
-from pinecone import Pinecone, ServerlessSpec
 import yfinance as yf
 import requests
-import os
+import pinecone
 
 # --- Secrets from Streamlit ---
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
@@ -15,19 +14,21 @@ PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]  # e.g., "us-east-1-aws"
 
+# --- Initialize Pinecone SDK ---
+pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+
+# --- Initialize Pinecone Index ---
+index_name = "customer-support-chatbot"
+index = pinecone.Index(index_name)
+
 # --- LangChain Embeddings ---
 embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 
-# --- Initialize Pinecone v3 SDK ---
-pc = Pinecone(api_key=PINECONE_API_KEY)
-index_name = "customer-support-chatbot"
-index = pc.Index(index_name)
-
 # --- Vector Store using LangChain Community ---
 vectorstore = PineconeVectorStore(
-    index=index,
+    index=index,  # Pass the pinecone.Index instance
     embedding=embeddings,
-    text_key="text"
+    text_key="text"  # This is the default field that contains the text data in Pinecone
 )
 
 # --- Setup Memory and LLM ---
