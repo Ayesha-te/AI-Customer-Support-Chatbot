@@ -4,15 +4,15 @@ import numpy as np
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain.memory import ConversationBufferMemory
 from langchain.chat_models import ChatOpenAI
-from langchain.chains import ConversationalRetrievalChain
 
-# Set up your OpenAI API key (make sure to keep it in the secrets file)
+# Get API Key from .streamlit/secrets.toml
 openai_api_key = st.secrets["openai_api_key"]
 
-# --- Setup OpenAI Embeddings ---
+# Initialize embedding and chat model
 embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+llm = ChatOpenAI(openai_api_key=openai_api_key)
 
-# --- Example FAQ Documents ---
+# Dummy FAQ data
 faq_documents = [
     {"question": "What are your business hours?", "answer": "We are open from 9 AM to 5 PM, Monday to Friday. ⏰"},
     {"question": "What is your return policy?", "answer": "Our return policy lasts 30 days from the purchase date. 🔄"},
@@ -20,69 +20,59 @@ faq_documents = [
     {"question": "How can I contact customer support?", "answer": "You can reach us by email at support@example.com. 📧"}
 ]
 
-# Embedding FAQ questions for vector search
-faq_questions = [doc['question'] for doc in faq_documents]
+# Embed FAQ questions
+faq_questions = [doc["question"] for doc in faq_documents]
 faq_embeddings = [embeddings.embed_query(q) for q in faq_questions]
 
-# --- Simple In-Memory Vector Store --- (No FAISS)
-# Storing embeddings and corresponding answers in a dictionary
-faq_vector_store = {i: {"question": faq_questions[i], "embedding": faq_embeddings[i], "answer": faq_documents[i]["answer"]} for i in range(len(faq_documents))}
+# In-memory store
+faq_vector_store = {
+    i: {"question": faq_questions[i], "embedding": faq_embeddings[i], "answer": faq_documents[i]["answer"]}
+    for i in range(len(faq_documents))
+}
 
-# --- Setup Memory for Conversation ---
+# Memory
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-# --- Setup LangChain LLM ---
-llm = ChatOpenAI(openai_api_key=openai_api_key)
-
-# Function to retrieve the most similar FAQ based on the user's question
+# Find best match answer
 def retrieve_answer(user_question):
     user_embedding = embeddings.embed_query(user_question)
     similarities = []
 
-    # Calculate similarity (cosine similarity between embeddings)
     for i, item in faq_vector_store.items():
-        similarity = np.dot(user_embedding, item["embedding"]) / (np.linalg.norm(user_embedding) * np.linalg.norm(item["embedding"]))
-        similarities.append((similarity, item["answer"]))
+        sim = np.dot(user_embedding, item["embedding"]) / (
+            np.linalg.norm(user_embedding) * np.linalg.norm(item["embedding"])
+        )
+        similarities.append((sim, item["answer"]))
 
-    # Sort by similarity and return the most similar answer
-    similarities.sort(reverse=True, key=lambda x: x[0])
-    return similarities[0][1]  # Return the most similar answer
+    similarities.sort(reverse=True)
+    return similarities[0][1] if similarities else "Sorry, I don't know the answer to that yet. 🤔"
 
-# --- Create Conversational Retrieval Chain ---
+# Main QA logic
 def qa_chain(user_input):
-    # Retrieve the most relevant answer for the user's question
     answer = retrieve_answer(user_input)
-    
-    # Add the user input and answer to the conversation memory
-    memory.add_message(role="user", content=user_input)
-    memory.add_message(role="assistant", content=answer)
-    
+    memory.chat_memory.add_user_message(user_input)
+    memory.chat_memory.add_ai_message(answer)
     return answer
 
-# --- Streamlit Frontend ---
+# --- Streamlit UI ---
+st.set_page_config(page_title="AI Customer Support 🤖", page_icon="💬")
 st.title("🤖 AI Customer Support Chatbot")
 
-# Sidebar for Chatbot Controls
-st.sidebar.header("🛠 Chat Controls")
-clear_chat = st.sidebar.button("🧹 Clear Chat History")
+st.sidebar.header("🛠 Controls")
+if st.sidebar.button("🧹 Clear Chat"):
+    memory.clear()
 
-if clear_chat:
-    memory.clear()  # Clear the conversation history
-
-# User Input for chatbot
 user_input = st.text_input("💬 Ask a question:")
 
 if user_input:
-    # Get the answer from the conversational retrieval chain
-    response = qa_chain(user_input)
-    st.write(f"🤖 **Assistant:** {response}")
+    answer = qa_chain(user_input)
+    st.markdown(f"**🤖 Assistant:** {answer}")
 
-# Display previous messages from the conversation history
 if memory.buffer:
-    st.subheader("💬 Conversation History:")
+    st.subheader("📜 Chat History")
     for msg in memory.buffer:
         if msg['role'] == "user":
-            st.markdown(f"**You:** {msg['content']} 🗣️")
+            st.markdown(f"**🗣 You:** {msg['content']}")
         else:
-            st.markdown(f"**Assistant:** {msg['content']} 🤖")
+            st.markdown(f"**🤖 Assistant:** {msg['content']}")
 
