@@ -2,7 +2,7 @@ import streamlit as st
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-from langchain_community.vectorstores import Pinecone
+from langchain.vectorstores import PineconeVectorStore
 from langchain_community.embeddings import OpenAIEmbeddings
 from pinecone import Pinecone, ServerlessSpec
 import yfinance as yf
@@ -18,12 +18,23 @@ WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
 pc = Pinecone(api_key=PINECONE_API_KEY)
 index_name = "customer-support-chatbot"
 
-# --- Connect to existing index ---
+# Create index if not exists (one-time setup)
+if index_name not in pc.list_indexes().names():
+    pc.create_index(
+        name=index_name,
+        dimension=1536,  # OpenAI embedding size
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region=PINECONE_ENV),
+    )
+
+# Connect to the index
 index = pc.Index(index_name)
 
 # --- LangChain Embeddings & VectorStore ---
 embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
-vectorstore = Pinecone.from_existing_index(index_name=index_name, embedding=embeddings)
+
+# Use PineconeVectorStore for existing index
+vectorstore = PineconeVectorStore(index=index, embedding=embeddings)
 
 # --- Setup Memory and LLM ---
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
