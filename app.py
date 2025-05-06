@@ -5,10 +5,10 @@ from langchain_community.embeddings import OpenAIEmbeddings
 from langchain.memory import ConversationBufferMemory
 from langchain.chat_models import ChatOpenAI
 
-# Get API Key from .streamlit/secrets.toml
+# Get API Key from secrets.toml
 openai_api_key = st.secrets["openai_api_key"]
 
-# Initialize embedding and chat model
+# Initialize embeddings and chat model
 embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 llm = ChatOpenAI(openai_api_key=openai_api_key)
 
@@ -20,34 +20,33 @@ faq_documents = [
     {"question": "How can I contact customer support?", "answer": "You can reach us by email at support@example.com. 📧"}
 ]
 
-# Embed FAQ questions
-faq_questions = [doc["question"] for doc in faq_documents]
-faq_embeddings = [embeddings.embed_query(q) for q in faq_questions]
+# Pre-compute normalized FAQ embeddings
+faq_vector_store = []
+for doc in faq_documents:
+    vec = embeddings.embed_query(doc["question"])
+    norm_vec = vec / np.linalg.norm(vec)
+    faq_vector_store.append({"question": doc["question"], "embedding": norm_vec, "answer": doc["answer"]})
 
-# In-memory store
-faq_vector_store = {
-    i: {"question": faq_questions[i], "embedding": faq_embeddings[i], "answer": faq_documents[i]["answer"]}
-    for i in range(len(faq_documents))
-}
-
-# Memory
+# Memory to store conversation history
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-# Find best match answer
-def retrieve_answer(user_question):
-    user_embedding = embeddings.embed_query(user_question)
-    similarities = []
+# Retrieve best matching answer with a confidence threshold
+def retrieve_answer(user_question, threshold=0.75):
+    user_vec = embeddings.embed_query(user_question)
+    norm_user_vec = user_vec / np.linalg.norm(user_vec)
 
-    for i, item in faq_vector_store.items():
-        sim = np.dot(user_embedding, item["embedding"]) / (
-            np.linalg.norm(user_embedding) * np.linalg.norm(item["embedding"])
-        )
-        similarities.append((sim, item["answer"]))
+    best_sim = -1
+    best_answer = "🤔 Sorry, I couldn't find a matching answer. Please try rephrasing."
 
-    similarities.sort(reverse=True)
-    return similarities[0][1] if similarities else "Sorry, I don't know the answer to that yet. 🤔"
+    for item in faq_vector_store:
+        sim = np.dot(norm_user_vec, item["embedding"])
+        if sim > best_sim:
+            best_sim = sim
+            best_answer = item["answer"] if sim >= threshold else best_answer
 
-# Main QA logic
+    return best_answer
+
+# Handle user input and memory
 def qa_chain(user_input):
     answer = retrieve_answer(user_input)
     memory.chat_memory.add_user_message(user_input)
@@ -62,12 +61,15 @@ st.sidebar.header("🛠 Controls")
 if st.sidebar.button("🧹 Clear Chat"):
     memory.clear()
 
+st.markdown("Welcome! Ask me anything about our services. 🛍️")
+
 user_input = st.text_input("💬 Ask a question:")
 
 if user_input:
     answer = qa_chain(user_input)
     st.markdown(f"**🤖 Assistant:** {answer}")
 
+# Display chat history
 if memory.buffer:
     st.subheader("📜 Chat History")
     for msg in memory.buffer:
@@ -75,5 +77,3 @@ if memory.buffer:
             st.markdown(f"**🗣 You:** {msg.content}")
         else:
             st.markdown(f"**🤖 Assistant:** {msg.content}")
-
-
