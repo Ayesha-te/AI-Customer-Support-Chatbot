@@ -19,6 +19,8 @@ pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
 
 # --- Initialize Pinecone Index ---
 index_name = "customer-support-chatbot"
+
+# Explicitly create the pinecone.Index instance
 index = pinecone.Index(index_name)
 
 # --- LangChain Embeddings ---
@@ -26,9 +28,9 @@ embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 
 # --- Vector Store using LangChain Community ---
 vectorstore = PineconeVectorStore(
-    index=index,  # Pass the pinecone.Index instance
+    index=index,  # Pass the correct pinecone.Index instance
     embedding=embeddings,
-    text_key="text"  # This is the default field that contains the text data in Pinecone
+    text_key="text"  # Ensure this matches the field where your text data is stored
 )
 
 # --- Setup Memory and LLM ---
