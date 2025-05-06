@@ -2,12 +2,11 @@ import streamlit as st
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-from langchain.vectorstores import Pinecone
-from langchain.embeddings.openai import OpenAIEmbeddings
+from langchain_community.vectorstores import Pinecone
+from langchain_community.embeddings import OpenAIEmbeddings
 import pinecone
 import yfinance as yf
 import requests
-import os
 
 # --- Load API Keys ---
 OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
@@ -91,3 +90,4 @@ if user_input:
 # --- Display Chat ---
 for sender, message in st.session_state.chat_history:
     st.markdown(f"**{sender}**: {message}")
+
