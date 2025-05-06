@@ -36,6 +36,49 @@ vectorstore = Pinecone.from_existing_index(
 # --- LLM and Memory ---
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 llm = ChatOpenAI(openai_api_key=OPENAI_API_KEY, temperature=0)
+import streamlit as st
+from langchain.chat_models import ChatOpenAI
+from langchain.chains import ConversationalRetrievalChain
+from langchain.memory import ConversationBufferMemory
+from langchain_community.vectorstores import Pinecone as LC_Pinecone
+from langchain_community.embeddings import OpenAIEmbeddings
+from pinecone import Pinecone as PineconeClient, ServerlessSpec
+import yfinance as yf
+import requests
+
+# --- Load secrets ---
+OPENAI_API_KEY = st.secrets["OPENAI_API_KEY"]
+PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
+PINECONE_ENV = st.secrets["PINECONE_ENV"]
+WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
+
+# --- Pinecone Setup ---
+pc = PineconeClient(api_key=PINECONE_API_KEY)
+
+index_name = "customer-support-chatbot"
+if index_name not in pc.list_indexes().names():
+    pc.create_index(
+        name=index_name,
+        dimension=1536,
+        metric="cosine",
+        spec=ServerlessSpec(cloud="aws", region=PINECONE_ENV)
+    )
+
+index = pc.Index(index_name)
+
+# --- LangChain Embeddings ---
+embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
+
+# --- LangChain Pinecone Wrapper ---
+vectorstore = LC_Pinecone(
+    index=index,
+    embedding=embeddings.embed_query,
+    text_key="text"
+)
+
+# --- LangChain LLM & Memory ---
+memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+llm = ChatOpenAI(openai_api_key=OPENAI_API_KEY, temperature=0)
 
 qa_chain = ConversationalRetrievalChain.from_llm(
     llm=llm,
@@ -44,7 +87,7 @@ qa_chain = ConversationalRetrievalChain.from_llm(
     verbose=True
 )
 
-# --- Helper Functions ---
+# --- Weather & Stock API helpers ---
 def get_stock_price(symbol):
     try:
         stock = yf.Ticker(symbol)
@@ -78,7 +121,6 @@ if "chat_history" not in st.session_state:
 user_input = st.text_input("You:", placeholder="Ask a question...")
 
 if user_input:
-    # Check for weather or stock queries
     if "weather" in user_input.lower():
         city = user_input.split("in")[-1].strip()
         response = get_weather(city)
@@ -93,8 +135,6 @@ if user_input:
     st.session_state.chat_history.append(("You", user_input))
     st.session_state.chat_history.append(("Bot", response))
 
-# --- Display chat history ---
 for speaker, msg in st.session_state.chat_history:
     st.markdown(f"**{speaker}:** {msg}")
-
 
