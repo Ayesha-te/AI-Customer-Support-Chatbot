@@ -3,44 +3,41 @@ from langchain_community.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
 from langchain.schema import AIMessage, HumanMessage
 
-# Streamlit page setup
-st.set_page_config(page_title="Universal AI Assistant 🌐", page_icon="🤖")
-st.title("🤖 Universal AI Assistant")
-st.sidebar.header("🛠 Controls")
+# Streamlit UI setup
+st.set_page_config(page_title="AI Assistant 🌐", page_icon="🤖")
+st.title("🤖 Ask Me Anything - AI Assistant")
 
-# API key from .streamlit/secrets.toml
+# Get OpenAI API Key securely from secrets.toml
 openai_api_key = st.secrets["openai_api_key"]
 
 # Initialize LLM and memory
 llm = ChatOpenAI(openai_api_key=openai_api_key, temperature=0.7)
-memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+memory = ConversationBufferMemory(return_messages=True)
 
-# Clear chat
+# Button to clear chat
 if st.sidebar.button("🧹 Clear Chat"):
-    memory.clear()
+    memory.chat_memory.messages = []  # Properly reset messages list
 
-# User input
-user_input = st.text_input("💬 Ask me anything:")
+# Get user input
+user_input = st.text_input("💬 Ask your question:")
 
-# Main logic
+# If input is given
 if user_input:
-    # Append user message and call model
-    messages = memory.chat_memory.messages
-    messages.append(HumanMessage(content=user_input))
+    # Add user's question to memory
+    memory.chat_memory.messages.append(HumanMessage(content=user_input))
 
-    response = llm(messages)
+    # Get LLM response
+    response = llm(memory.chat_memory.messages)
 
-    # Save model's response to memory
-    messages.append(AIMessage(content=response.content))
+    # Save response in memory
+    memory.chat_memory.messages.append(AIMessage(content=response.content))
 
-    # Show response
+    # Display assistant reply
     st.markdown(f"**🤖 Assistant:** {response.content}")
 
 # Show chat history
-if memory.buffer:
+if memory.chat_memory.messages:
     st.subheader("📜 Chat History")
-    for msg in memory.buffer:
-        if msg.type == "human":
-            st.markdown(f"**🧑 You:** {msg.content}")
-        else:
-            st.markdown(f"**🤖 Assistant:** {msg.content}")
+    for msg in memory.chat_memory.messages:
+        role = "🧑 You" if isinstance(msg, HumanMessage) else "🤖 Assistant"
+        st.markdown(f"**{role}:** {msg.content}")
