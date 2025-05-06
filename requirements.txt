@@ -1,7 +1,5 @@
-streamlit
-openai
+faiss-cpu
 langchain
+openai
+streamlit
 langchain-community
-pinecone
-yfinance
-requests
