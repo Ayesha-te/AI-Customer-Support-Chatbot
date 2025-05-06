@@ -1,14 +1,16 @@
-import openai
 import streamlit as st
 import numpy as np
 from langchain_community.embeddings import OpenAIEmbeddings
 from langchain_community.chat_models import ChatOpenAI
-from langchain.memory import ConversationBufferMemory
 
-# Get API Key from .streamlit/secrets.toml
+# Page config
+st.set_page_config(page_title="AI Customer Support 🤖", page_icon="💬")
+st.title("🤖 AI Customer Support Chatbot")
+
+# Load secrets
 openai_api_key = st.secrets["openai_api_key"]
 
-# Initialize embedding and chat model
+# Initialize model
 embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 llm = ChatOpenAI(openai_api_key=openai_api_key)
 
@@ -30,52 +32,39 @@ faq_vector_store = {
     for i in range(len(faq_documents))
 }
 
-# Memory (session state-based)
+# Initialize session state
 if "memory" not in st.session_state:
     st.session_state.memory = []
 
-# Similarity-based retrieval
+# Clear chat
+if st.sidebar.button("🧹 Clear Chat"):
+    st.session_state.memory = []
+
+# Answer retrieval
 def retrieve_answer(user_question):
     user_embedding = embeddings.embed_query(user_question)
     similarities = []
-
-    for item in faq_vector_store.values():
+    for i, item in faq_vector_store.items():
         sim = np.dot(user_embedding, item["embedding"]) / (
             np.linalg.norm(user_embedding) * np.linalg.norm(item["embedding"])
         )
         similarities.append((sim, item["answer"]))
-
     similarities.sort(reverse=True)
-    best_similarity, best_answer = similarities[0]
-    return best_answer if best_similarity > 0.7 else "Sorry, I don't know the answer to that yet. 🤔"
+    return similarities[0][1] if similarities else "Sorry, I don't know the answer to that yet. 🤔"
 
-# Main QA logic
-def qa_chain(user_input):
-    answer = retrieve_answer(user_input)
-    st.session_state.memory.append({"user": user_input, "bot": answer})
-    return answer
-
-# Streamlit UI
-st.set_page_config(page_title="AI Customer Support 🤖", page_icon="💬")
-st.title("🤖 AI Customer Support Chatbot")
-
-# Sidebar
-st.sidebar.header("🛠 Controls")
-if st.sidebar.button("🧹 Clear Chat"):
-    st.session_state.memory = []
-
-# Chat Input
+# UI
 user_input = st.text_input("💬 Ask a question:")
 
 if user_input:
-    answer = qa_chain(user_input)
+    answer = retrieve_answer(user_input)
+    st.session_state.memory.append(("user", user_input))
+    st.session_state.memory.append(("ai", answer))
     st.markdown(f"**🤖 Assistant:** {answer}")
 
-# Chat History
 if st.session_state.memory:
     st.subheader("📜 Chat History")
-    for chat in reversed(st.session_state.memory):
-        st.markdown(f"**🗣 You:** {chat['user']}")
-        st.markdown(f"**🤖 Assistant:** {chat['bot']}")
-
-
+    for role, msg in st.session_state.memory:
+        if role == "user":
+            st.markdown(f"**🗣 You:** {msg}")
+        else:
+            st.markdown(f"**🤖 Assistant:** {msg}")
