@@ -1,9 +1,7 @@
 import openai
 import streamlit as st
-import numpy as np
-import faiss
 from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
+from langchain.vectorstores import InMemoryVectorStore
 from langchain.memory import ConversationBufferMemory
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
@@ -11,7 +9,6 @@ from langchain_community.embeddings import OpenAIEmbeddings  # Update imports ba
 
 # Set up your OpenAI API key (make sure to keep it in the secrets file)
 openai_api_key = st.secrets["openai_api_key"]
-pinecone_api_key = st.secrets["pinecone_api_key"]  # Assuming you're using Pinecone as well
 
 # --- Setup OpenAI Embeddings ---
 embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
@@ -28,15 +25,12 @@ faq_documents = [
 faq_questions = [doc['question'] for doc in faq_documents]
 faq_embeddings = [embeddings.embed_query(q) for q in faq_questions]
 
-# Create a FAISS index for storing the embeddings
-index = faiss.IndexFlatL2(1536)  # Adjust the dimensionality based on your embeddings
+# --- Create In-Memory Vector Store ---
+vector_store = InMemoryVectorStore(embedding_function=embeddings.embed_query)
 
-# Add the embeddings to the FAISS index
-faiss_index = np.array(faq_embeddings)
-index.add(faiss_index)
-
-# --- Setup FAISS Vector Store ---
-vectorstore = FAISS(embedding_function=embeddings.embed_query, faiss_index=index)
+# Add FAQ documents to the vector store
+for i, faq in enumerate(faq_documents):
+    vector_store.add_texts([faq["question"]], [faq["answer"]])
 
 # --- Setup Memory for Conversation ---
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
@@ -47,7 +41,7 @@ llm = ChatOpenAI(openai_api_key=openai_api_key)
 # --- Create Conversational Retrieval Chain ---
 qa_chain = ConversationalRetrievalChain.from_llm_and_vectorstore(
     llm=llm,
-    vectorstore=vectorstore,
+    vectorstore=vector_store,
     memory=memory
 )
 
@@ -67,3 +61,4 @@ if memory.buffer:
     st.subheader("Conversation History:")
     for msg in memory.buffer:
         st.write(f"{msg['role']}: {msg['content']}")
+
