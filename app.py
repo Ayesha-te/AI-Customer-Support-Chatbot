@@ -2,37 +2,27 @@ import openai
 import streamlit as st
 import numpy as np
 from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_community.chat_models import ChatOpenAI
 from langchain.memory import ConversationBufferMemory
-from langchain.chat_models import ChatOpenAI
 
-# Setup Streamlit
-st.set_page_config(page_title="AI Customer Support 🤖", page_icon="💬")
-st.title("🤖 AI Customer Support Chatbot")
-st.sidebar.header("🛠 Controls")
-
-# Get API Key from secrets.toml
+# Get API Key from .streamlit/secrets.toml
 openai_api_key = st.secrets["openai_api_key"]
 
-# Embedding + LLM
+# Initialize embedding and chat model
 embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 llm = ChatOpenAI(openai_api_key=openai_api_key)
 
-# Dummy FAQ Data
+# Dummy FAQ data
 faq_documents = [
     {"question": "What are your business hours?", "answer": "We are open from 9 AM to 5 PM, Monday to Friday. ⏰"},
     {"question": "What is your return policy?", "answer": "Our return policy lasts 30 days from the purchase date. 🔄"},
     {"question": "Do you offer international shipping?", "answer": "Yes, we ship internationally, with extra fees depending on the country. 🌍✈️"},
-    {"question": "How can I contact customer support?", "answer": "You can reach us by email at support@example.com. 📧"},
+    {"question": "How can I contact customer support?", "answer": "You can reach us by email at support@example.com. 📧"}
 ]
 
+# Embed FAQ questions
 faq_questions = [doc["question"] for doc in faq_documents]
-
-# Cache Embeddings
-@st.cache_data
-def get_faq_embeddings():
-    return [embeddings.embed_query(q) for q in faq_questions]
-
-faq_embeddings = get_faq_embeddings()
+faq_embeddings = [embeddings.embed_query(q) for q in faq_questions]
 
 # In-memory vector store
 faq_vector_store = {
@@ -40,56 +30,52 @@ faq_vector_store = {
     for i in range(len(faq_documents))
 }
 
-# Memory stored in session
+# Memory (session state-based)
 if "memory" not in st.session_state:
-    st.session_state.memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
+    st.session_state.memory = []
 
-# Similarity Function
-def cosine_similarity(vec1, vec2):
-    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
-
-# Retrieve Best Match
+# Similarity-based retrieval
 def retrieve_answer(user_question):
     user_embedding = embeddings.embed_query(user_question)
     similarities = []
 
     for item in faq_vector_store.values():
-        sim = cosine_similarity(user_embedding, item["embedding"])
+        sim = np.dot(user_embedding, item["embedding"]) / (
+            np.linalg.norm(user_embedding) * np.linalg.norm(item["embedding"])
+        )
         similarities.append((sim, item["answer"]))
-        print(f"Similarity with '{item['question']}': {sim:.4f}")
 
     similarities.sort(reverse=True)
-    top_sim, top_ans = similarities[0]
-    print(f"Top similarity: {top_sim:.4f}")
-    return top_ans if top_sim > 0.75 else "Sorry, I couldn't find a clear answer to that. 🤔"
+    best_similarity, best_answer = similarities[0]
+    return best_answer if best_similarity > 0.7 else "Sorry, I don't know the answer to that yet. 🤔"
 
-# Chat logic
+# Main QA logic
 def qa_chain(user_input):
     answer = retrieve_answer(user_input)
-    st.session_state.memory.chat_memory.add_user_message(user_input)
-    st.session_state.memory.chat_memory.add_ai_message(answer)
+    st.session_state.memory.append({"user": user_input, "bot": answer})
     return answer
 
-# Clear Chat
-if st.sidebar.button("🧹 Clear Chat"):
-    st.session_state.memory.clear()
-    st.experimental_rerun()
+# Streamlit UI
+st.set_page_config(page_title="AI Customer Support 🤖", page_icon="💬")
+st.title("🤖 AI Customer Support Chatbot")
 
-# User Input
+# Sidebar
+st.sidebar.header("🛠 Controls")
+if st.sidebar.button("🧹 Clear Chat"):
+    st.session_state.memory = []
+
+# Chat Input
 user_input = st.text_input("💬 Ask a question:")
 
-# Show response
 if user_input:
-    response = qa_chain(user_input)
-    st.markdown(f"**🤖 Assistant:** {response}")
+    answer = qa_chain(user_input)
+    st.markdown(f"**🤖 Assistant:** {answer}")
 
 # Chat History
-if st.session_state.memory.buffer:
+if st.session_state.memory:
     st.subheader("📜 Chat History")
-    for msg in st.session_state.memory.buffer:
-        if msg.type == "human":
-            st.markdown(f"**🗣 You:** {msg.content}")
-        else:
-            st.markdown(f"**🤖 Assistant:** {msg.content}")
+    for chat in reversed(st.session_state.memory):
+        st.markdown(f"**🗣 You:** {chat['user']}")
+        st.markdown(f"**🤖 Assistant:** {chat['bot']}")
 
 
