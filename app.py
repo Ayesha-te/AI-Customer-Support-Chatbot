@@ -1,11 +1,10 @@
 import openai
 import streamlit as st
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import InMemoryVectorStore
+import numpy as np
+from langchain_community.embeddings import OpenAIEmbeddings
 from langchain.memory import ConversationBufferMemory
 from langchain.chat_models import ChatOpenAI
 from langchain.chains import ConversationalRetrievalChain
-from langchain_community.embeddings import OpenAIEmbeddings  # Update imports based on LangChain warnings
 
 # Set up your OpenAI API key (make sure to keep it in the secrets file)
 openai_api_key = st.secrets["openai_api_key"]
@@ -25,12 +24,9 @@ faq_documents = [
 faq_questions = [doc['question'] for doc in faq_documents]
 faq_embeddings = [embeddings.embed_query(q) for q in faq_questions]
 
-# --- Create In-Memory Vector Store ---
-vector_store = InMemoryVectorStore(embedding_function=embeddings.embed_query)
-
-# Add FAQ documents to the vector store
-for i, faq in enumerate(faq_documents):
-    vector_store.add_texts([faq["question"]], [faq["answer"]])
+# --- Simple In-Memory Vector Store --- (No FAISS)
+# Storing embeddings and corresponding answers in a dictionary
+faq_vector_store = {i: {"question": faq_questions[i], "embedding": faq_embeddings[i], "answer": faq_documents[i]["answer"]} for i in range(len(faq_documents))}
 
 # --- Setup Memory for Conversation ---
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
@@ -38,12 +34,30 @@ memory = ConversationBufferMemory(memory_key="chat_history", return_messages=Tru
 # --- Setup LangChain LLM ---
 llm = ChatOpenAI(openai_api_key=openai_api_key)
 
+# Function to retrieve the most similar FAQ based on the user's question
+def retrieve_answer(user_question):
+    user_embedding = embeddings.embed_query(user_question)
+    similarities = []
+
+    # Calculate similarity (cosine similarity between embeddings)
+    for i, item in faq_vector_store.items():
+        similarity = np.dot(user_embedding, item["embedding"]) / (np.linalg.norm(user_embedding) * np.linalg.norm(item["embedding"]))
+        similarities.append((similarity, item["answer"]))
+
+    # Sort by similarity and return the most similar answer
+    similarities.sort(reverse=True, key=lambda x: x[0])
+    return similarities[0][1]  # Return the most similar answer
+
 # --- Create Conversational Retrieval Chain ---
-qa_chain = ConversationalRetrievalChain.from_llm_and_vectorstore(
-    llm=llm,
-    vectorstore=vector_store,
-    memory=memory
-)
+def qa_chain(user_input):
+    # Retrieve the most relevant answer for the user's question
+    answer = retrieve_answer(user_input)
+    
+    # Add the user input and answer to the conversation memory
+    memory.add_user_message(user_input)
+    memory.add_ai_message(answer)
+    
+    return answer
 
 # --- Streamlit Frontend ---
 st.title("AI Customer Support Chatbot")
@@ -52,8 +66,8 @@ st.title("AI Customer Support Chatbot")
 user_input = st.text_input("Ask a question:")
 
 if user_input:
-    # Get the answer from the conversation chain
-    response = qa_chain.run(input=user_input)
+    # Get the answer from the conversational retrieval chain
+    response = qa_chain(user_input)
     st.write(response)
 
 # Display previous messages from the conversation history
