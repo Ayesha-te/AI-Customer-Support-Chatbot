@@ -15,13 +15,16 @@ WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]  # e.g., "us-east-1-aws"
 
 # --- Initialize Pinecone SDK ---
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+from pinecone import Pinecone
+
+# Initialize Pinecone using the correct method (Pinecone class)
+pinecone_client = Pinecone(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
 
 # --- Initialize Pinecone Index ---
 index_name = "customer-support-chatbot"
 
 # Explicitly create the pinecone.Index instance
-index = pinecone.Index(index_name)
+index = pinecone_client.Index(index_name)
 
 # --- LangChain Embeddings ---
 embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
@@ -87,3 +90,4 @@ if user_input:
 
 for speaker, msg in st.session_state.chat_history:
     st.markdown(f"**{speaker}:** {msg}")
+
