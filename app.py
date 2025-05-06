@@ -71,8 +71,9 @@ if user_input:
 if memory.buffer:
     st.subheader("📜 Chat History")
     for msg in memory.buffer:
-        if msg['role'] == "user":
-            st.markdown(f"**🗣 You:** {msg['content']}")
+        if msg.type == "human":
+            st.markdown(f"**🗣 You:** {msg.content}")
         else:
-            st.markdown(f"**🤖 Assistant:** {msg['content']}")
+            st.markdown(f"**🤖 Assistant:** {msg.content}")
+
 
