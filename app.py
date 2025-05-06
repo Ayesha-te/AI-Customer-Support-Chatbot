@@ -4,7 +4,7 @@ from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain_community.vectorstores import Pinecone
 from langchain_community.embeddings import OpenAIEmbeddings
-import pinecone
+from pinecone import Pinecone, ServerlessSpec
 import yfinance as yf
 import requests
 
@@ -14,9 +14,14 @@ PINECONE_API_KEY = st.secrets["PINECONE_API_KEY"]
 PINECONE_ENV = st.secrets["PINECONE_ENV"]
 WEATHER_API_KEY = st.secrets["WEATHER_API_KEY"]
 
-# --- Initialize Pinecone ---
-pinecone.init(api_key=PINECONE_API_KEY, environment=PINECONE_ENV)
+# --- Initialize Pinecone Client (v3) ---
+pc = Pinecone(api_key=PINECONE_API_KEY)
 index_name = "customer-support-chatbot"
+
+# --- Connect to existing index ---
+index = pc.Index(index_name)
+
+# --- LangChain Embeddings & VectorStore ---
 embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 vectorstore = Pinecone.from_existing_index(index_name=index_name, embedding=embeddings)
 
@@ -39,7 +44,6 @@ if "chat_history" not in st.session_state:
 
 user_input = st.text_input("Ask your question (FAQ, weather, stocks, general queries):", key="input")
 
-
 # --- Real-time Data Handlers ---
 def get_weather(city):
     url = f"http://api.weatherapi.com/v1/current.json?key={WEATHER_API_KEY}&q={city}"
@@ -60,7 +64,6 @@ def get_stock_price(ticker):
         return f"📈 Current stock price of {ticker.upper()} is ${price:.2f}"
     else:
         return "❌ Could not fetch stock data."
-
 
 # --- Process User Input ---
 def process_query(query):
@@ -90,4 +93,3 @@ if user_input:
 # --- Display Chat ---
 for sender, message in st.session_state.chat_history:
     st.markdown(f"**{sender}**: {message}")
-
