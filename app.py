@@ -1,62 +1,46 @@
 import openai
 import faiss
 import numpy as np
-from langchain.embeddings import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
-from langchain.chat_models import ChatOpenAI
+import streamlit as st
+from langchain_community.embeddings import OpenAIEmbeddings
+from langchain_community.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
-import streamlit as st
+from langchain.chat_models import ChatOpenAI
 
-# Set your OpenAI API key (replace with your own API key)
-openai.api_key = "your-openai-api-key"
+# --- Set your API keys ---
+OPENAI_API_KEY = st.secrets["openai"]["api_key"]
 
-# --- Setup OpenAI Embeddings ---
-embeddings = OpenAIEmbeddings(openai_api_key=openai.api_key)
+# --- LangChain Embeddings & VectorStore ---
+embeddings = OpenAIEmbeddings(openai_api_key=OPENAI_API_KEY)
 
-# --- Initialize FAISS index ---
-# FAISS index dimension should match the embedding dimensions
-# OpenAI embeddings (GPT-3 models) typically have 1536 dimensions
-index = faiss.IndexFlatL2(1536)
+# Create a FAISS index (you can modify this based on your use case)
+index = faiss.IndexFlatL2(1536)  # Dimension should match your embedding size
 
-# We create the FAISS vector store using OpenAI embeddings
+# Create the FAISS vector store
 vectorstore = FAISS(embedding_function=embeddings.embed_query, faiss_index=index)
 
 # --- Setup Memory for Conversation ---
 memory = ConversationBufferMemory(memory_key="chat_history", return_messages=True)
 
-# --- Setup the LLM ---
-llm = ChatOpenAI(openai_api_key=openai.api_key, temperature=0)
+# --- Setup LLM ---
+llm = ChatOpenAI(openai_api_key=OPENAI_API_KEY, temperature=0.7)
 
-# --- Setup Conversational Retrieval Chain ---
+# --- Setup Conversational Chain ---
 qa_chain = ConversationalRetrievalChain.from_llm(
-    llm=llm,
-    retriever=vectorstore.as_retriever(),
-    memory=memory
+    llm,
+    vectorstore.as_retriever(),
+    memory=memory,
 )
 
-# --- Streamlit UI ---
+# --- Streamlit Interface ---
 st.title("AI Customer Support Chatbot")
 
-# Input field for the user's query
-user_query = st.text_input("Ask me anything:")
+# User input for the chatbot
+user_input = st.text_input("Ask me anything:")
 
-if user_query:
-    # Get a response from the model using the conversational retrieval chain
-    response = qa_chain.run(input=user_query)
+if user_input:
+    response = qa_chain.run(user_input)
     st.write(response)
 
-# Example: Add some documents to the FAISS vector store for testing purposes
-# (In a real scenario, you would replace this with dynamic documents or FAQs)
-documents = [
-    "How do I reset my password?",
-    "What is your refund policy?",
-    "How can I contact customer support?",
-    "Where is my order?"
-]
-
-# Embedding and storing documents in FAISS
-for doc in documents:
-    doc_embedding = embeddings.embed_query(doc)
-    vectorstore.add_texts([doc], [doc_embedding])
 
